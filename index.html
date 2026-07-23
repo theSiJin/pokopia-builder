@@ -34,28 +34,26 @@
         <button class="btn" data-mode="erase"><span class="ic">🧽</span><span class="btn-txt">擦除</span></button>
       </div>
 
-      <div class="divider hide-mobile"></div>
+      <div class="divider"></div>
 
-      <div class="tool-group hide-mobile">
+      <div class="tool-group">
         <button class="btn" id="btn-pan"><span class="ic">✋</span><span class="btn-txt">平移</span></button>
         <button class="btn" id="btn-focus"><span class="ic">🎯</span><span class="btn-txt">居中</span></button>
-        <button class="btn" id="btn-reset"><span class="ic">⟲</span><span class="btn-txt">回正</span></button>
+        <button class="btn hide-narrow" id="btn-reset"><span class="ic">⟲</span><span class="btn-txt">回正</span></button>
       </div>
 
       <div class="divider"></div>
 
       <div class="tool-group">
         <button class="btn" id="btn-undo"><span class="ic">↩︎</span><span class="btn-txt">撤销</span></button>
-        <button class="btn danger hide-mobile" id="btn-clear"><span class="ic">🗑</span><span class="btn-txt">清空</span></button>
+        <button class="btn danger hide-narrow" id="btn-clear"><span class="ic">🗑</span><span class="btn-txt">清空</span></button>
         <button class="btn more-mobile" id="btn-more" type="button" title="更多"><span class="ic">⋯</span></button>
         <button class="btn" id="btn-help" type="button" title="操作说明" aria-expanded="false"><span class="ic">?</span></button>
       </div>
     </div>
 
     <!-- 手机端更多操作菜单 -->
-    <div id="more-menu" class="more-menu" hidden>
-      <button class="btn" id="btn-pan-m"><span class="ic">✋</span>平移</button>
-      <button class="btn" id="btn-focus-m"><span class="ic">🎯</span>居中</button>
+    <div id="more-menu" class="more-menu">
       <button class="btn" id="btn-reset-m"><span class="ic">⟲</span>回正</button>
       <button class="btn danger" id="btn-clear-m"><span class="ic">🗑</span>清空</button>
     </div>
@@ -725,7 +723,6 @@
     function setPanMode(on) {
       panMode = on;
       document.getElementById('btn-pan')?.classList.toggle('active', panMode);
-      document.getElementById('btn-pan-m')?.classList.toggle('active', panMode);
       controls.mouseButtons.LEFT = panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
       controls.touches = panMode
         ? { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }
@@ -734,10 +731,8 @@
       toast(panMode ? '平移模式：拖拽移动画面' : '已退出平移模式');
     }
     document.getElementById('btn-pan').addEventListener('click', () => setPanMode(!panMode));
-    document.getElementById('btn-pan-m').addEventListener('click', () => { setPanMode(!panMode); moreMenu.classList.remove('show'); });
     document.getElementById('btn-focus').addEventListener('click', focusBuild);
     document.getElementById('btn-reset').addEventListener('click', resetView);
-    document.getElementById('btn-focus-m').addEventListener('click', () => { focusBuild(); moreMenu.classList.remove('show'); });
     document.getElementById('btn-reset-m').addEventListener('click', () => { resetView(); moreMenu.classList.remove('show'); });
 
     function doClear() {
@@ -747,12 +742,22 @@
     document.getElementById('btn-clear').addEventListener('click', doClear);
     document.getElementById('btn-clear-m').addEventListener('click', doClear);
 
-    document.getElementById('btn-more').addEventListener('click', (e) => {
+    const btnMore = document.getElementById('btn-more');
+    btnMore.addEventListener('click', (e) => {
       e.stopPropagation();
-      moreMenu.classList.toggle('show');
+      const opening = !moreMenu.classList.contains('show');
+      moreMenu.classList.toggle('show', opening);
+      // 关闭帮助气泡
+      const hp = document.getElementById('help-pop');
+      const bh = document.getElementById('btn-help');
+      hp?.setAttribute('hidden', '');
+      bh?.classList.remove('active');
+      bh?.setAttribute('aria-expanded', 'false');
     });
     document.addEventListener('click', (e) => {
-      if (!moreMenu.contains(e.target) && e.target.id !== 'btn-more') moreMenu.classList.remove('show');
+      if (!moreMenu.classList.contains('show')) return;
+      if (moreMenu.contains(e.target) || btnMore.contains(e.target)) return;
+      moreMenu.classList.remove('show');
     });
 
     // 保存 / 读取

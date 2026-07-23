@@ -313,7 +313,8 @@ button.btn .ic { font-size: 15px; line-height: 1; }
 #loader.hidden { display: none; }
 
 /* 桌面默认隐藏的手机控件 */
-#mobile-dock, #sheet-backdrop, .sheet-handle, .more-mobile, #more-menu { display: none; }
+#mobile-dock, #sheet-backdrop, .sheet-handle, .more-mobile { display: none; }
+#more-menu { display: none; }
 
 /* 滚动条 */
 .card-bd::-webkit-scrollbar { width: 8px; }
@@ -349,6 +350,7 @@ button.btn .ic { font-size: 15px; line-height: 1; }
   .brand-text small { display: none; }
   .btn-txt { display: none; }
   .hide-mobile { display: none !important; }
+  .hide-narrow { display: none !important; }
   .more-mobile { display: inline-flex !important; }
   button.btn {
     padding: 8px 10px;
@@ -492,12 +494,12 @@ button.btn .ic { font-size: 15px; line-height: 1; }
 
   #toast { top: calc(64px + env(safe-area-inset-top)); }
 
-  .more-menu {
+  #more-menu {
     display: none;
     position: absolute;
     top: calc(58px + env(safe-area-inset-top));
     right: max(8px, env(safe-area-inset-right));
-    z-index: 18;
+    z-index: 28;
     flex-direction: column;
     gap: 6px;
     padding: 8px;
@@ -506,9 +508,9 @@ button.btn .ic { font-size: 15px; line-height: 1; }
     border-radius: 12px;
     box-shadow: var(--shadow);
   }
-  .more-menu.show { display: flex; }
-  .more-menu .btn { justify-content: flex-start; width: 140px; }
-  .more-menu .btn .btn-txt { display: inline; }
+  #more-menu.show { display: flex !important; }
+  #more-menu .btn { justify-content: flex-start; width: 140px; }
+  #more-menu .btn .btn-txt { display: inline; }
 }
 
 @media (max-width: 420px) {
