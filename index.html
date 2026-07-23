@@ -60,39 +60,50 @@
     <div id="sidebar">
       <!-- 素材调色板 -->
       <div class="card" id="palette-card">
-        <div class="card-hd">
-          <span>素材</span>
+        <div class="card-hd" data-toggle="palette-card">
+          <span class="hd-left"><button class="fold-btn" type="button" aria-label="折叠">▾</button>素材</span>
           <small id="sel-name">—</small>
         </div>
-        <div class="pal-controls">
-          <input id="pal-search" class="pal-search" type="search" placeholder="🔍 搜索素材（中/英文，如 wall、brick、木）" />
-          <div class="pal-tabs" id="pal-tabs">
-            <button class="tab active" data-cat="all">全部</button>
-            <button class="tab" data-cat="wall">墙壁</button>
-            <button class="tab" data-cat="floor">地板</button>
-            <button class="tab" data-cat="print">花纹</button>
-            <button class="tab" data-cat="ground">地形</button>
+        <div class="card-body">
+          <div class="pal-controls">
+            <input id="pal-search" class="pal-search" type="search" placeholder="🔍 搜索素材（中/英文）" />
+            <div class="pal-tabs" id="pal-tabs">
+              <button class="tab active" data-cat="all">全部</button>
+              <button class="tab" data-cat="wall">墙壁</button>
+              <button class="tab" data-cat="floor">地板</button>
+              <button class="tab" data-cat="print">花纹</button>
+              <button class="tab" data-cat="ground">地形</button>
+            </div>
           </div>
-        </div>
-        <div class="card-bd">
-          <div class="swatches" id="pal-grid"></div>
-          <div class="pal-empty" id="pal-empty" style="display:none">没有匹配的素材</div>
+          <div class="card-bd">
+            <div class="swatches" id="pal-grid"></div>
+            <div class="pal-empty" id="pal-empty" style="display:none">没有匹配的素材</div>
+          </div>
         </div>
       </div>
 
       <!-- 材料清单 -->
       <div class="card" id="bom-card">
-        <div class="card-hd">材料清单 <small>实时统计</small></div>
-        <div class="card-bd">
-          <div class="bom-list" id="bom-list"></div>
-          <div class="bom-total">
-            <span class="u">合计需要</span>
-            <span><span class="big" id="bom-total">0</span> <span class="u">块</span></span>
-          </div>
-          <div class="bom-actions">
-            <button class="btn" id="btn-copy"><span class="ic">📋</span>复制清单</button>
-            <button class="btn" id="btn-save"><span class="ic">💾</span>保存</button>
-            <button class="btn" id="btn-load"><span class="ic">📂</span>读取</button>
+        <div class="card-hd" data-toggle="bom-card">
+          <span class="hd-left"><button class="fold-btn" type="button" aria-label="折叠">▾</button>材料清单</span>
+          <small>实时统计</small>
+        </div>
+        <div class="card-body">
+          <div class="card-bd">
+            <div class="bom-list" id="bom-list"></div>
+            <div class="bom-sub">原材料成本（合成配方）</div>
+            <div class="bom-list" id="cost-list"></div>
+            <div class="bom-sub">3D 打印成本</div>
+            <div class="bom-list" id="print-list"></div>
+            <div class="bom-total">
+              <span class="u">方块合计</span>
+              <span><span class="big" id="bom-total">0</span> <span class="u">块</span></span>
+            </div>
+            <div class="bom-actions">
+              <button class="btn" id="btn-copy"><span class="ic">📋</span>复制清单</button>
+              <button class="btn" id="btn-save"><span class="ic">💾</span>保存</button>
+              <button class="btn" id="btn-load"><span class="ic">📂</span>读取</button>
+            </div>
           </div>
         </div>
       </div>
@@ -113,26 +124,56 @@
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { BLOCK_TYPES, CAT_LABEL } from './blocks.js';
+    import { BLOCK_TYPES, CAT_LABEL, MAT_META } from './blocks.js';
 
     /* =========================================================
-     * 1. 素材目录（来自 blocks.js：Game8 名称 + Serebii 图片）
-     *    3D 立方体使用每块的平均色（干净的体量参考），
-     *    调色板 / 材料清单使用真实的 Serebii 图标。
+     * 1. 素材目录 + 真实贴图（透明底用平均色填充）
      * ======================================================= */
     const TYPE_MAP = Object.fromEntries(BLOCK_TYPES.map(t => [t.id, t]));
 
-    // 3D 方块材质：纯色（按素材平均色），带缓存
     const materialCache = {};
+
+    function makeOpaqueTexture(imgUrl, fillColor) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.decoding = 'async';
+        img.onload = () => {
+          const S = 128;
+          const c = document.createElement('canvas');
+          c.width = c.height = S;
+          const ctx = c.getContext('2d');
+          ctx.fillStyle = fillColor || '#cccccc';
+          ctx.fillRect(0, 0, S, S);
+          // 略放大绘制，减少等距图标周围空白
+          const pad = 4;
+          ctx.drawImage(img, pad, pad, S - pad * 2, S - pad * 2);
+          const tex = new THREE.CanvasTexture(c);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.magFilter = THREE.LinearFilter;
+          tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.needsUpdate = true;
+          resolve(tex);
+        };
+        img.onerror = () => resolve(null);
+        img.src = imgUrl;
+      });
+    }
+
     function getMaterial(id) {
       if (materialCache[id]) return materialCache[id];
       const t = TYPE_MAP[id] || { color: '#cccccc' };
-      const mat = new THREE.MeshLambertMaterial({ color: t.color });
+      // 先用平均色占位，贴图加载完后替换
+      const mat = new THREE.MeshLambertMaterial({ color: new THREE.Color(t.color) });
       materialCache[id] = mat;
+      makeOpaqueTexture(t.img, t.color).then((tex) => {
+        if (!tex) return;
+        mat.map = tex;
+        mat.color.set(0xffffff);
+        mat.needsUpdate = true;
+      });
       return mat;
     }
 
-    // 生成素材图标 <img>（用于调色板与清单）
     function swatchImg(id, cls) {
       const t = TYPE_MAP[id];
       const im = document.createElement('img');
@@ -141,6 +182,16 @@
       im.alt = t ? t.en : id;
       im.src = t ? t.img : '';
       im.style.background = t ? t.color + '22' : 'transparent';
+      im.onerror = () => { im.style.visibility = 'hidden'; };
+      return im;
+    }
+    function matImg(mid, cls) {
+      const m = MAT_META[mid];
+      const im = document.createElement('img');
+      im.className = cls;
+      im.loading = 'lazy';
+      im.alt = m ? m.en : mid;
+      im.src = m ? m.img : '';
       im.onerror = () => { im.style.visibility = 'hidden'; };
       return im;
     }
@@ -449,12 +500,43 @@
     document.getElementById('floor-up').addEventListener('click', () => setFloor(currentFloor + 1));
     document.getElementById('floor-dn').addEventListener('click', () => setFloor(currentFloor - 1));
 
-    // 材料清单
+    // 材料清单 + 原材料 / 3D打印成本
     const CAT_ORDER = ['wall', 'floor', 'print', 'ground'];
     function computeBOM() {
       const counts = {};
       for (const b of blocks.values()) counts[b.typeId] = (counts[b.typeId] || 0) + 1;
       return counts;
+    }
+    function aggregateCost(counts, field) {
+      const totals = {};
+      for (const [id, n] of Object.entries(counts)) {
+        const t = TYPE_MAP[id];
+        if (!t || !t[field]) continue;
+        for (const r of t[field]) {
+          if (!totals[r.id]) totals[r.id] = { id: r.id, name: r.name, cn: r.cn || r.name, qty: 0 };
+          totals[r.id].qty += r.qty * n;
+        }
+      }
+      return Object.values(totals).sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name));
+    }
+    function fillMatList(el, rows, emptyText) {
+      el.innerHTML = '';
+      if (!rows.length) {
+        el.innerHTML = `<div class="bom-empty soft">${emptyText}</div>`;
+        return;
+      }
+      rows.forEach((r) => {
+        const row = document.createElement('div');
+        row.className = 'bom-row cost';
+        row.appendChild(matImg(r.id, 'sw'));
+        const nm = document.createElement('span');
+        nm.className = 'nm';
+        nm.innerHTML = `${r.cn || r.name}<small>${r.name}</small>`;
+        const ct = document.createElement('span');
+        ct.className = 'ct'; ct.textContent = r.qty;
+        row.appendChild(nm); row.appendChild(ct);
+        el.appendChild(row);
+      });
     }
     function refreshBOM() {
       const counts = computeBOM();
@@ -477,7 +559,8 @@
             row.appendChild(swatchImg(t.id, 'sw'));
             const nm = document.createElement('span');
             nm.className = 'nm';
-            nm.innerHTML = `${t.cn || t.en}<small>${t.en}</small>`;
+            const recipeHint = (t.recipe || []).map(r => `${r.cn || r.name}×${r.qty}`).join(' + ');
+            nm.innerHTML = `${t.cn || t.en}<small>${t.en}${recipeHint ? ' · ' + recipeHint : ''}</small>`;
             const ct = document.createElement('span');
             ct.className = 'ct'; ct.textContent = counts[t.id];
             row.appendChild(nm); row.appendChild(ct);
@@ -486,6 +569,10 @@
         });
       }
       document.getElementById('bom-total').textContent = blocks.size;
+      fillMatList(document.getElementById('cost-list'), aggregateCost(counts, 'recipe'),
+        used.length ? '当前方块多为世界采集，暂无合成配方' : '放置方块后显示原材料');
+      fillMatList(document.getElementById('print-list'), aggregateCost(counts, 'print'),
+        used.length ? '当前方块无法 3D 打印 / 无打印成本' : '放置方块后显示打印成本');
     }
     function bomText() {
       const counts = computeBOM();
@@ -496,9 +583,34 @@
         lines.push(`\n# ${CAT_LABEL[cat] || cat}`);
         items.forEach(t => lines.push(`${t.en}（${t.cn}） × ${counts[t.id]}`));
       });
-      lines.push(`\n合计：${blocks.size} 块`);
+      const recipe = aggregateCost(counts, 'recipe');
+      if (recipe.length) {
+        lines.push('\n# 原材料成本（合成配方）');
+        recipe.forEach(r => lines.push(`${r.name}（${r.cn}） × ${r.qty}`));
+      }
+      const print = aggregateCost(counts, 'print');
+      if (print.length) {
+        lines.push('\n# 3D 打印成本');
+        print.forEach(r => lines.push(`${r.name}（${r.cn}） × ${r.qty}`));
+      }
+      lines.push(`\n方块合计：${blocks.size} 块`);
       return lines.join('\n');
     }
+
+    // 面板折叠
+    function setupFold(cardId) {
+      const card = document.getElementById(cardId);
+      const hd = card.querySelector('.card-hd');
+      const key = 'pokopia_fold_' + cardId;
+      if (localStorage.getItem(key) === '1') card.classList.add('collapsed');
+      hd.addEventListener('click', (e) => {
+        if (e.target.closest('input, a')) return;
+        card.classList.toggle('collapsed');
+        localStorage.setItem(key, card.classList.contains('collapsed') ? '1' : '0');
+      });
+    }
+    setupFold('palette-card');
+    setupFold('bom-card');
 
     document.getElementById('btn-copy').addEventListener('click', async () => {
       if (!blocks.size) return toast('清单是空的');
