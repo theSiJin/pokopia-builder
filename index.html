@@ -34,15 +34,6 @@
         <button class="btn" data-mode="erase"><span class="ic">🧽</span><span class="btn-txt">擦除</span></button>
       </div>
 
-      <div class="divider"></div>
-
-      <div class="tool-group height-ctrl">
-        <span class="btn-txt">楼层</span>
-        <button class="btn step" id="floor-dn">−</button>
-        <b id="floor-val">1</b>
-        <button class="btn step" id="floor-up">+</button>
-      </div>
-
       <div class="divider hide-mobile"></div>
 
       <div class="tool-group hide-mobile">
@@ -57,6 +48,7 @@
         <button class="btn" id="btn-undo"><span class="ic">↩︎</span><span class="btn-txt">撤销</span></button>
         <button class="btn danger hide-mobile" id="btn-clear"><span class="ic">🗑</span><span class="btn-txt">清空</span></button>
         <button class="btn more-mobile" id="btn-more" type="button" title="更多"><span class="ic">⋯</span></button>
+        <button class="btn" id="btn-help" type="button" title="操作说明" aria-expanded="false"><span class="ic">?</span></button>
       </div>
     </div>
 
@@ -134,11 +126,13 @@
       </button>
     </div>
 
-    <div id="hint" class="hint-desk">
-      <b>左键</b> 放置 · <b>右键/中键拖拽</b> 平移 · <b>左键拖拽</b> 旋转 · <b>滚轮</b> 缩放 · <b>方向键</b> 移动重心 · <b>空格</b> 居中
-    </div>
-    <div id="hint-mobile" class="hint-mobile">
-      <b>点按</b> 放置 · <b>单指拖</b> 旋转 · <b>双指</b> 缩放/平移 · 底部打开素材/清单
+    <div id="help-pop" class="help-pop" hidden>
+      <div class="help-desk">
+        <b>左键</b> 放置 · <b>右键/中键拖拽</b> 平移 · <b>左键拖拽</b> 旋转 · <b>滚轮</b> 缩放 · <b>方向键</b> 移动重心 · <b>空格</b> 居中
+      </div>
+      <div class="help-mobile">
+        <b>点按</b> 放置 · <b>单指拖</b> 旋转 · <b>双指</b> 缩放/平移 · 底部打开素材/清单
+      </div>
     </div>
 
     <div id="toast"></div>
@@ -262,16 +256,42 @@
     function resetView() {
       camera.position.copy(DEFAULT_CAM);
       controls.target.copy(DEFAULT_TARGET);
+      // 空场景也按可用区域视觉居中（避开右侧面板）
+      applyUiCenterOffset();
       controls.update();
+    }
+    // 将当前 orbit 目标从「全屏中心」平移到「扣除 UI 后的可用区中心」
+    function applyUiCenterOffset() {
+      const w = renderer.domElement.clientWidth || window.innerWidth;
+      const h = renderer.domElement.clientHeight || window.innerHeight;
+      let shiftX = 0, shiftY = 0; // 可用区中心相对全屏中心（右/下为正）
+      if (isMobileLayout()) shiftY = -24;
+      else shiftX = -170;
+
+      const dist = camera.position.distanceTo(controls.target);
+      const vFov = THREE.MathUtils.degToRad(camera.fov);
+      const worldPerPxY = (2 * Math.tan(vFov / 2) * dist) / Math.max(h, 1);
+      const worldPerPxX = worldPerPxY * (w / Math.max(h, 1));
+      camera.updateMatrixWorld();
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+      const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+      const move = right.multiplyScalar(-shiftX * worldPerPxX)
+        .add(up.multiplyScalar(shiftY * worldPerPxY));
+      controls.target.add(move);
+      camera.position.add(move);
     }
     function focusBuild() {
       if (!blocks.size) { resetView(); return; }
-      const c = new THREE.Vector3(); let n = 0;
-      for (const b of blocks.values()) { c.add(b.mesh.getWorldPosition(new THREE.Vector3())); n++; }
-      c.divideScalar(n);
+      const box = new THREE.Box3();
+      for (const b of blocks.values()) box.expandByObject(b.mesh);
+      const center = box.getCenter(new THREE.Vector3());
+
+      // 保持当前观察方向与距离，对准建筑包围盒中心
       const offset = camera.position.clone().sub(controls.target);
-      controls.target.copy(c);
-      camera.position.copy(c).add(offset);
+      if (offset.lengthSq() < 1e-6) offset.copy(DEFAULT_CAM).sub(DEFAULT_TARGET);
+      controls.target.copy(center);
+      camera.position.copy(center).add(offset);
+      applyUiCenterOffset();
       controls.update();
     }
     function panView(dx, dz) {
@@ -404,7 +424,6 @@
     const pointer = new THREE.Vector2();
     let mode = 'build';
     let currentType = (BLOCK_TYPES.find(t => t.id === 'woodenflooring') || BLOCK_TYPES[0]).id;
-    let currentFloor = 0;
     let target = null;
     let hovered = null;
 
@@ -423,7 +442,7 @@
       if (hit.object === groundPlane) {
         const gx = Math.floor(hit.point.x - world.position.x);
         const gz = Math.floor(hit.point.z - world.position.z);
-        target = { x: gx, y: currentFloor, z: gz };
+        target = { x: gx, y: 0, z: gz };
       } else {
         const { x, y, z } = hit.object.userData;
         hovered = { x, y, z };
@@ -483,7 +502,7 @@
     document.addEventListener('gesturechange', (e) => e.preventDefault());
 
     /* =========================================================
-     * 5. UI：调色板（搜索 + 分类） / 模式 / 楼层 / 清单 / 存取
+     * 5. UI：调色板（搜索 + 分类） / 模式 / 清单 / 存取
      * ======================================================= */
     const selName = document.getElementById('sel-name');
     const palGrid = document.getElementById('pal-grid');
@@ -576,15 +595,6 @@
     }
     document.querySelectorAll('#mode-group .btn').forEach(b =>
       b.addEventListener('click', () => setMode(b.dataset.mode)));
-
-    // 楼层
-    const floorVal = document.getElementById('floor-val');
-    function setFloor(f) {
-      currentFloor = Math.max(0, Math.min(MAX_H - 1, f));
-      floorVal.textContent = currentFloor + 1;
-    }
-    document.getElementById('floor-up').addEventListener('click', () => setFloor(currentFloor + 1));
-    document.getElementById('floor-dn').addEventListener('click', () => setFloor(currentFloor - 1));
 
     // 材料清单 + 原材料 / 3D打印成本
     const CAT_ORDER = ['wall', 'floor', 'print', 'ground'];
@@ -783,9 +793,8 @@
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
       else if (e.key === 'b') setMode('build');
       else if (e.key === 'e') setMode('erase');
-      else if (e.key === 'q' || e.key === 'PageUp') setFloor(currentFloor + 1);
-      else if (e.key === 'PageDown') setFloor(currentFloor - 1);
       else if (e.key === ' ') { e.preventDefault(); focusBuild(); }
+      else if (e.key === '?' || e.key === 'h') { e.preventDefault(); toggleHelp(); }
       else if (e.key === 'ArrowUp')    { e.preventDefault(); panView(0, 1); }
       else if (e.key === 'ArrowDown')  { e.preventDefault(); panView(0, -1); }
       else if (e.key === 'ArrowLeft')  { e.preventDefault(); panView(-1, 0); }
@@ -821,20 +830,36 @@
     selectType(currentType);
     refreshBOM();
     resize();
+    applyUiCenterOffset();
+    controls.update();
     animate();
     document.getElementById('loader').classList.add('hidden');
-    // 手机首次进入给一次轻提示
-    if (isMobileLayout() && !localStorage.getItem('pokopia_mobile_tip')) {
-      setTimeout(() => {
-        toast('底部可打开素材与清单');
-        localStorage.setItem('pokopia_mobile_tip', '1');
-      }, 600);
-    }
 
-    // 首次进入放一小片地板示例
-    if (!localStorage.getItem(SAVE_KEY)) {
-      for (let x = 8; x < 12; x++) for (let z = 8; z < 12; z++) addBlock(x, 0, z, currentType, false);
+    // 操作说明（? 默认收起）
+    const helpPop = document.getElementById('help-pop');
+    const btnHelp = document.getElementById('btn-help');
+    function toggleHelp(force) {
+      const open = force ?? helpPop.hasAttribute('hidden');
+      if (open) {
+        helpPop.removeAttribute('hidden');
+        btnHelp.classList.add('active');
+        btnHelp.setAttribute('aria-expanded', 'true');
+      } else {
+        helpPop.setAttribute('hidden', '');
+        btnHelp.classList.remove('active');
+        btnHelp.setAttribute('aria-expanded', 'false');
+      }
     }
+    btnHelp.addEventListener('click', (e) => {
+      e.stopPropagation();
+      moreMenu.classList.remove('show');
+      toggleHelp();
+    });
+    document.addEventListener('click', (e) => {
+      if (!helpPop.hasAttribute('hidden') && !helpPop.contains(e.target) && e.target !== btnHelp && !btnHelp.contains(e.target)) {
+        toggleHelp(false);
+      }
+    });
   </script>
 </body>
 </html>

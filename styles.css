@@ -115,6 +115,32 @@ button.btn .ic { font-size: 15px; line-height: 1; }
   font-size: 16px; font-weight: 700;
 }
 
+#btn-help {
+  width: 34px; height: 34px; padding: 0; justify-content: center;
+  font-weight: 800;
+}
+#btn-help .ic { font-size: 15px; font-family: Georgia, "Times New Roman", serif; }
+
+/* 操作说明气泡（默认隐藏） */
+.help-pop {
+  position: absolute;
+  top: 66px;
+  left: 14px;
+  z-index: 16;
+  max-width: min(420px, calc(100vw - 360px));
+  padding: 12px 14px;
+  background: rgba(255,253,248,.96);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+.help-pop[hidden] { display: none !important; }
+.help-pop b { color: var(--ink); }
+.help-pop .help-mobile { display: none; }
+
 /* ===== 右侧面板 ===== */
 #sidebar {
   position: absolute;
@@ -257,24 +283,6 @@ button.btn .ic { font-size: 15px; line-height: 1; }
 .bom-actions { display: flex; gap: 6px; margin-top: 10px; }
 .bom-actions .btn { flex: 1; justify-content: center; font-size: 11px; padding: 6px 8px; }
 
-/* 底部提示 */
-#hint, #hint-mobile {
-  position: absolute;
-  bottom: 14px;
-  left: 14px;
-  padding: 8px 14px;
-  background: rgba(255,253,248,.92);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--ink-soft);
-  z-index: 10;
-  box-shadow: var(--shadow);
-  max-width: calc(100vw - 360px);
-}
-#hint b, #hint-mobile b { color: var(--ink); }
-.hint-mobile { display: none; }
-
 /* toast */
 #toast {
   position: absolute;
@@ -315,7 +323,7 @@ button.btn .ic { font-size: 15px; line-height: 1; }
 @media (max-width: 900px) {
   #topbar { max-width: calc(100vw - 300px); }
   #sidebar { width: 280px; }
-  #hint, #hint-mobile { max-width: calc(100vw - 300px); }
+  .help-pop { max-width: calc(100vw - 300px); }
 }
 
 /* ===== 手机 ===== */
@@ -348,7 +356,6 @@ button.btn .ic { font-size: 15px; line-height: 1; }
     border-radius: 10px;
   }
   .step { width: 34px; height: 34px; min-height: 34px; }
-  .height-ctrl b { min-width: 16px; font-size: 13px; }
   .divider { height: 22px; }
 
   /* 底部抽屉 */
@@ -474,18 +481,14 @@ button.btn .ic { font-size: 15px; line-height: 1; }
   }
   .dock-btn b:empty, .dock-btn b[data-zero="1"] { display: none; }
 
-  .hint-desk { display: none; }
-  .hint-mobile {
-    display: block;
-    left: 50%;
-    transform: translateX(-50%);
-    bottom: calc(64px + env(safe-area-inset-bottom));
-    max-width: calc(100vw - 24px);
-    text-align: center;
-    font-size: 11px;
-    padding: 7px 12px;
-    pointer-events: none;
+  .help-pop {
+    top: calc(58px + env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    max-width: none;
   }
+  .help-pop .help-desk { display: none; }
+  .help-pop .help-mobile { display: block; }
 
   #toast { top: calc(64px + env(safe-area-inset-top)); }
 
