@@ -126,10 +126,10 @@
 
     <div id="help-pop" class="help-pop" hidden>
       <div class="help-desk">
-        <b>左键</b> 放置 · <b>右键/中键拖拽</b> 平移 · <b>左键拖拽</b> 旋转 · <b>滚轮</b> 缩放 · <b>方向键</b> 移动重心 · <b>空格</b> 居中
+        <b>左键</b> 放置 · <b>右键/中键拖拽</b> 平移 · <b>左键拖拽</b> 旋转 · <b>滚轮</b> 缩放 · <b>居中</b> 操作台对屏幕中心 · <b>回正</b> 恢复默认视角 · <b>空格</b> 居中
       </div>
       <div class="help-mobile">
-        <b>点按</b> 放置 · <b>单指拖</b> 旋转 · <b>双指</b> 缩放/平移 · 底部打开素材/清单
+        <b>点按</b> 放置 · <b>单指拖</b> 旋转 · <b>双指</b> 缩放/平移 · <b>居中</b> 操作台对屏幕中心 · <b>回正</b> 恢复默认视角
       </div>
     </div>
 
@@ -248,50 +248,33 @@
       RIGHT: THREE.MOUSE.PAN,
     };
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+
+    // 操作台世界坐标中心（地基在原点）
+    const PLATFORM_CENTER = new THREE.Vector3(0, 2, 0);
+    controls.target.copy(PLATFORM_CENTER);
+    // 记录初始默认视角，供「回正」使用
+    controls.saveState();
     const DEFAULT_CAM = camera.position.clone();
     const DEFAULT_TARGET = controls.target.clone();
 
+    // 回正：恢复到页面刚打开时的默认角度与机位
     function resetView() {
-      camera.position.copy(DEFAULT_CAM);
-      controls.target.copy(DEFAULT_TARGET);
-      // 空场景也按可用区域视觉居中（避开右侧面板）
-      applyUiCenterOffset();
-      controls.update();
+      controls.reset();
     }
-    // 将当前 orbit 目标从「全屏中心」平移到「扣除 UI 后的可用区中心」
-    function applyUiCenterOffset() {
-      const w = renderer.domElement.clientWidth || window.innerWidth;
-      const h = renderer.domElement.clientHeight || window.innerHeight;
-      let shiftX = 0, shiftY = 0; // 可用区中心相对全屏中心（右/下为正）
-      if (isMobileLayout()) shiftY = -24;
-      else shiftX = -170;
 
-      const dist = camera.position.distanceTo(controls.target);
-      const vFov = THREE.MathUtils.degToRad(camera.fov);
-      const worldPerPxY = (2 * Math.tan(vFov / 2) * dist) / Math.max(h, 1);
-      const worldPerPxX = worldPerPxY * (w / Math.max(h, 1));
-      camera.updateMatrixWorld();
-      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
-      const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
-      const move = right.multiplyScalar(-shiftX * worldPerPxX)
-        .add(up.multiplyScalar(shiftY * worldPerPxY));
-      controls.target.add(move);
-      camera.position.add(move);
-    }
+    // 居中：保持当前观察角度与距离，把操作台正中心对准屏幕正中
     function focusBuild() {
-      if (!blocks.size) { resetView(); return; }
-      const box = new THREE.Box3();
-      for (const b of blocks.values()) box.expandByObject(b.mesh);
-      const center = box.getCenter(new THREE.Vector3());
-
-      // 保持当前观察方向与距离，对准建筑包围盒中心
       const offset = camera.position.clone().sub(controls.target);
       if (offset.lengthSq() < 1e-6) offset.copy(DEFAULT_CAM).sub(DEFAULT_TARGET);
-      controls.target.copy(center);
-      camera.position.copy(center).add(offset);
-      applyUiCenterOffset();
+      // 先关掉阻尼，避免这一帧被插值带偏
+      const wasDamping = controls.enableDamping;
+      controls.enableDamping = false;
+      controls.target.copy(PLATFORM_CENTER);
+      camera.position.copy(PLATFORM_CENTER).add(offset);
       controls.update();
+      controls.enableDamping = wasDamping;
     }
+
     function panView(dx, dz) {
       const forward = new THREE.Vector3(); camera.getWorldDirection(forward);
       forward.y = 0; forward.normalize();
@@ -835,8 +818,6 @@
     selectType(currentType);
     refreshBOM();
     resize();
-    applyUiCenterOffset();
-    controls.update();
     animate();
     document.getElementById('loader').classList.add('hidden');
 
