@@ -237,11 +237,12 @@
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
+    controls.rotateSpeed = 0.45;
     controls.maxPolarAngle = Math.PI / 2.05;
     controls.minDistance = 5;
     controls.maxDistance = 120;
     controls.screenSpacePanning = true;
-    controls.target.set(0, 2, 0);
+    controls.target.set(0, 5, 0);
     controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
       MIDDLE: THREE.MOUSE.PAN,
@@ -249,9 +250,24 @@
     };
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
-    // 操作台世界坐标中心（地基在原点）
-    const PLATFORM_CENTER = new THREE.Vector3(0, 2, 0);
+    // 操作台观察中心：抬高一点，让地面固定落在画面偏下位置，向上留出搭建空间
+    const PLATFORM_CENTER = new THREE.Vector3(0, 5, 0);
     controls.target.copy(PLATFORM_CENTER);
+
+    // 平移边界：目标点限制在地基范围附近，避免把操作台移出画面
+    const PAN_MIN = new THREE.Vector3(-GRID / 2, 0, -GRID / 2);
+    const PAN_MAX = new THREE.Vector3(GRID / 2, MAX_H, GRID / 2);
+    function clampTarget() {
+      const t = controls.target;
+      const nx = Math.min(Math.max(t.x, PAN_MIN.x), PAN_MAX.x);
+      const ny = Math.min(Math.max(t.y, PAN_MIN.y), PAN_MAX.y);
+      const nz = Math.min(Math.max(t.z, PAN_MIN.z), PAN_MAX.z);
+      const dx = nx - t.x, dy = ny - t.y, dz = nz - t.z;
+      if (dx || dy || dz) {
+        t.set(nx, ny, nz);
+        camera.position.x += dx; camera.position.y += dy; camera.position.z += dz;
+      }
+    }
     // 记录初始默认视角，供「回正」使用
     controls.saveState();
     const DEFAULT_CAM = camera.position.clone();
@@ -810,6 +826,7 @@
       if (!isDragging && activePointers.size <= 1) pick();
       updateGhost();
       controls.update();
+      clampTarget();
       renderer.render(scene, camera);
     }
 
