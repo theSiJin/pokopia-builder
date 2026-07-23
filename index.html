@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pokopia 建筑辅助工具 · 素材统计</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236fb26b'/><rect x='30' y='30' width='40' height='40' rx='6' fill='%23d98b6a'/></svg>" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <!-- 顶部工具栏 -->
+    <div id="topbar">
+      <div class="brand">
+        <div class="logo"></div>
+        <div>Pokopia 建筑助手<br><small>素材用量参考工具</small></div>
+      </div>
+
+      <div class="tool-group" id="mode-group">
+        <button class="btn active" data-mode="build"><span class="ic">🧱</span>建造</button>
+        <button class="btn" data-mode="erase"><span class="ic">🧽</span>擦除</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="tool-group height-ctrl">
+        <span>楼层</span>
+        <button class="btn step" id="floor-dn">−</button>
+        <b id="floor-val">1</b>
+        <button class="btn step" id="floor-up">+</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="tool-group">
+        <button class="btn" id="btn-pan"><span class="ic">✋</span>平移</button>
+        <button class="btn" id="btn-focus"><span class="ic">🎯</span>居中</button>
+        <button class="btn" id="btn-reset"><span class="ic">⟲</span>回正</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="tool-group">
+        <button class="btn" id="btn-undo"><span class="ic">↩︎</span>撤销</button>
+        <button class="btn danger" id="btn-clear"><span class="ic">🗑</span>清空</button>
+      </div>
+    </div>
+
+    <!-- 右侧面板 -->
+    <div id="sidebar">
+      <!-- 素材调色板 -->
+      <div class="card" id="palette-card">
+        <div class="card-hd">
+          <span>素材</span>
+          <small id="sel-name">—</small>
+        </div>
+        <div class="pal-controls">
+          <input id="pal-search" class="pal-search" type="search" placeholder="🔍 搜索素材（中/英文，如 wall、brick、木）" />
+          <div class="pal-tabs" id="pal-tabs">
+            <button class="tab active" data-cat="all">全部</button>
+            <button class="tab" data-cat="wall">墙壁</button>
+            <button class="tab" data-cat="floor">地板</button>
+            <button class="tab" data-cat="print">花纹</button>
+            <button class="tab" data-cat="ground">地形</button>
+          </div>
+        </div>
+        <div class="card-bd">
+          <div class="swatches" id="pal-grid"></div>
+          <div class="pal-empty" id="pal-empty" style="display:none">没有匹配的素材</div>
+        </div>
+      </div>
+
+      <!-- 材料清单 -->
+      <div class="card" id="bom-card">
+        <div class="card-hd">材料清单 <small>实时统计</small></div>
+        <div class="card-bd">
+          <div class="bom-list" id="bom-list"></div>
+          <div class="bom-total">
+            <span class="u">合计需要</span>
+            <span><span class="big" id="bom-total">0</span> <span class="u">块</span></span>
+          </div>
+          <div class="bom-actions">
+            <button class="btn" id="btn-copy"><span class="ic">📋</span>复制清单</button>
+            <button class="btn" id="btn-save"><span class="ic">💾</span>保存</button>
+            <button class="btn" id="btn-load"><span class="ic">📂</span>读取</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="hint">
+      <b>左键</b> 放置 · <b>右键/中键拖拽</b> 平移 · <b>左键拖拽</b> 旋转 · <b>滚轮</b> 缩放 · <b>方向键</b> 移动重心 · <b>空格</b> 居中
+    </div>
+
+    <div id="toast"></div>
+
+    <div id="loader">
+      <div class="spin"></div>
+      <div>正在加载 3D 引擎…</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { BLOCK_TYPES, CAT_LABEL } from './blocks.js';
+
+    /* =========================================================
+     * 1. 素材目录（来自 blocks.js：Game8 名称 + Serebii 图片）
+     *    3D 立方体使用每块的平均色（干净的体量参考），
+     *    调色板 / 材料清单使用真实的 Serebii 图标。
+     * ======================================================= */
+    const TYPE_MAP = Object.fromEntries(BLOCK_TYPES.map(t => [t.id, t]));
+
+    // 3D 方块材质：纯色（按素材平均色），带缓存
+    const materialCache = {};
+    function getMaterial(id) {
+      if (materialCache[id]) return materialCache[id];
+      const t = TYPE_MAP[id] || { color: '#cccccc' };
+      const mat = new THREE.MeshLambertMaterial({ color: t.color });
+      materialCache[id] = mat;
+      return mat;
+    }
+
+    // 生成素材图标 <img>（用于调色板与清单）
+    function swatchImg(id, cls) {
+      const t = TYPE_MAP[id];
+      const im = document.createElement('img');
+      im.className = cls;
+      im.loading = 'lazy';
+      im.alt = t ? t.en : id;
+      im.src = t ? t.img : '';
+      im.style.background = t ? t.color + '22' : 'transparent';
+      im.onerror = () => { im.style.visibility = 'hidden'; };
+      return im;
+    }
+
+    /* =========================================================
+     * 2. 场景 / 相机 / 光照 / 控制
+     * ======================================================= */
+    const GRID = 20;            // 地基边长（格）
+    const MAX_H = 30;           // 最大楼层
+    const canvas = document.getElementById('scene');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#dfeaf2');
+    scene.fog = new THREE.Fog('#dfeaf2', 45, 90);
+
+    const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
+    camera.position.set(GRID * 0.9, GRID * 0.85, GRID * 0.9);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI / 2.05;
+    controls.minDistance = 5;
+    controls.maxDistance = 120;
+    controls.screenSpacePanning = true;
+    controls.target.set(0, 2, 0);
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: THREE.MOUSE.PAN,
+    };
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+    const DEFAULT_CAM = camera.position.clone();
+    const DEFAULT_TARGET = controls.target.clone();
+
+    function resetView() {
+      camera.position.copy(DEFAULT_CAM);
+      controls.target.copy(DEFAULT_TARGET);
+      controls.update();
+    }
+    function focusBuild() {
+      if (!blocks.size) { resetView(); return; }
+      const c = new THREE.Vector3(); let n = 0;
+      for (const b of blocks.values()) { c.add(b.mesh.getWorldPosition(new THREE.Vector3())); n++; }
+      c.divideScalar(n);
+      const offset = camera.position.clone().sub(controls.target);
+      controls.target.copy(c);
+      camera.position.copy(c).add(offset);
+      controls.update();
+    }
+    function panView(dx, dz) {
+      const forward = new THREE.Vector3(); camera.getWorldDirection(forward);
+      forward.y = 0; forward.normalize();
+      const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
+      const move = right.multiplyScalar(dx).add(forward.multiplyScalar(-dz));
+      controls.target.add(move);
+      camera.position.add(move);
+      controls.update();
+    }
+
+    // 光照
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const sun = new THREE.DirectionalLight(0xfff2dd, 1.1);
+    sun.position.set(GRID, GRID * 1.4, GRID * 0.6);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const d = GRID * 1.2;
+    sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
+    sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
+    sun.shadow.camera.far = 120;
+    scene.add(sun);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9db08a, 0.4));
+
+    // 世界容器（居中）
+    const world = new THREE.Group();
+    world.position.set(-GRID / 2, 0, -GRID / 2);
+    scene.add(world);
+
+    // 地基底板
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(GRID, 0.4, GRID),
+      new THREE.MeshLambertMaterial({ color: '#cdbf9f' })
+    );
+    base.position.set(GRID / 2, -0.2, GRID / 2);
+    base.receiveShadow = true;
+    world.add(base);
+
+    // 网格线
+    const grid = new THREE.GridHelper(GRID, GRID, 0x9c8f74, 0xc7b89a);
+    grid.position.set(GRID / 2, 0.01, GRID / 2);
+    world.add(grid);
+
+    // 放置用的地面平面（拾取）
+    const groundPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(GRID, GRID),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    groundPlane.rotation.x = -Math.PI / 2;
+    groundPlane.position.set(GRID / 2, 0, GRID / 2);
+    world.add(groundPlane);
+
+    // 预览方块
+    const ghostGeo = new THREE.BoxGeometry(1, 1, 1);
+    const ghost = new THREE.Mesh(ghostGeo, new THREE.MeshBasicMaterial({
+      color: 0x4f8f4c, transparent: true, opacity: 0.35, depthWrite: false,
+    }));
+    const ghostEdges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(ghostGeo),
+      new THREE.LineBasicMaterial({ color: 0x2f5f2c })
+    );
+    ghost.add(ghostEdges);
+    ghost.visible = false;
+    world.add(ghost);
+
+    /* =========================================================
+     * 3. 体素数据模型  blocks: Map "x,y,z" -> { typeId, mesh }
+     * ======================================================= */
+    const blocks = new Map();
+    const geoCube = new THREE.BoxGeometry(1, 1, 1);
+    const key = (x, y, z) => `${x},${y},${z}`;
+
+    function inBounds(x, y, z) {
+      return x >= 0 && x < GRID && z >= 0 && z < GRID && y >= 0 && y < MAX_H;
+    }
+    function addBlock(x, y, z, typeId, record = true) {
+      if (!inBounds(x, y, z) || !TYPE_MAP[typeId]) return false;
+      const k = key(x, y, z);
+      if (blocks.has(k)) return false;
+      const mesh = new THREE.Mesh(geoCube, getMaterial(typeId));
+      mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData = { x, y, z, typeId };
+      world.add(mesh);
+      blocks.set(k, { typeId, mesh });
+      if (record) pushUndo({ op: 'add', x, y, z, typeId });
+      refreshBOM();
+      return true;
+    }
+    function removeBlock(x, y, z, record = true) {
+      const k = key(x, y, z);
+      const b = blocks.get(k);
+      if (!b) return false;
+      world.remove(b.mesh);
+      blocks.delete(k);
+      if (record) pushUndo({ op: 'remove', x, y, z, typeId: b.typeId });
+      refreshBOM();
+      return true;
+    }
+    function clearAll(record = true) {
+      if (record && blocks.size) {
+        const snapshot = [...blocks.entries()].map(([k, v]) => {
+          const [x, y, z] = k.split(',').map(Number);
+          return { x, y, z, typeId: v.typeId };
+        });
+        pushUndo({ op: 'clear', snapshot });
+      }
+      for (const b of blocks.values()) world.remove(b.mesh);
+      blocks.clear();
+      refreshBOM();
+    }
+
+    /* ---- 撤销栈 ---- */
+    const undoStack = [];
+    function pushUndo(action) { undoStack.push(action); if (undoStack.length > 300) undoStack.shift(); }
+    function undo() {
+      const a = undoStack.pop();
+      if (!a) { toast('没有可撤销的操作'); return; }
+      if (a.op === 'add') removeBlock(a.x, a.y, a.z, false);
+      else if (a.op === 'remove') addBlock(a.x, a.y, a.z, a.typeId, false);
+      else if (a.op === 'clear') a.snapshot.forEach(b => addBlock(b.x, b.y, b.z, b.typeId, false));
+    }
+
+    /* =========================================================
+     * 4. 交互：射线拾取 + 放置 / 删除 + 预览
+     * ======================================================= */
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let mode = 'build';
+    let currentType = (BLOCK_TYPES.find(t => t.id === 'woodenflooring') || BLOCK_TYPES[0]).id;
+    let currentFloor = 0;
+    let target = null;
+    let hovered = null;
+
+    function updatePointer(e) {
+      const r = canvas.getBoundingClientRect();
+      pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+      pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+    }
+    function pick() {
+      raycaster.setFromCamera(pointer, camera);
+      const meshes = [...blocks.values()].map(b => b.mesh);
+      const hits = raycaster.intersectObjects([groundPlane, ...meshes], false);
+      target = null; hovered = null;
+      if (!hits.length) return;
+      const hit = hits[0];
+      if (hit.object === groundPlane) {
+        const gx = Math.floor(hit.point.x - world.position.x);
+        const gz = Math.floor(hit.point.z - world.position.z);
+        target = { x: gx, y: currentFloor, z: gz };
+      } else {
+        const { x, y, z } = hit.object.userData;
+        hovered = { x, y, z };
+        const n = hit.face.normal;
+        target = { x: x + Math.round(n.x), y: y + Math.round(n.y), z: z + Math.round(n.z) };
+      }
+    }
+    function updateGhost() {
+      if (mode === 'erase') {
+        if (hovered) {
+          ghost.visible = true;
+          ghost.position.set(hovered.x + 0.5, hovered.y + 0.5, hovered.z + 0.5);
+          ghost.material.color.set(0xd9705f);
+          ghostEdges.material.color.set(0x8a2f22);
+        } else ghost.visible = false;
+      } else {
+        if (target && inBounds(target.x, target.y, target.z) && !blocks.has(key(target.x, target.y, target.z))) {
+          ghost.visible = true;
+          ghost.position.set(target.x + 0.5, target.y + 0.5, target.z + 0.5);
+          ghost.material.color.set(0x4f8f4c);
+          ghostEdges.material.color.set(0x2f5f2c);
+        } else ghost.visible = false;
+      }
+    }
+
+    let isDragging = false, downPos = null;
+    canvas.addEventListener('pointerdown', (e) => { downPos = { x: e.clientX, y: e.clientY }; isDragging = false; });
+    canvas.addEventListener('pointermove', (e) => {
+      updatePointer(e);
+      if (downPos && (Math.abs(e.clientX - downPos.x) > 4 || Math.abs(e.clientY - downPos.y) > 4)) isDragging = true;
+    });
+    canvas.addEventListener('pointerup', (e) => {
+      const wasDrag = isDragging; downPos = null;
+      if (wasDrag) return;
+      updatePointer(e); pick();
+      if (e.button === 2) { if (hovered) removeBlock(hovered.x, hovered.y, hovered.z); return; }
+      if (e.button !== 0 || panMode) return;
+      if (mode === 'erase') { if (hovered) removeBlock(hovered.x, hovered.y, hovered.z); }
+      else if (target) { addBlock(target.x, target.y, target.z, currentType); }
+    });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    /* =========================================================
+     * 5. UI：调色板（搜索 + 分类） / 模式 / 楼层 / 清单 / 存取
+     * ======================================================= */
+    const selName = document.getElementById('sel-name');
+    const palGrid = document.getElementById('pal-grid');
+    const palEmpty = document.getElementById('pal-empty');
+    const palSearch = document.getElementById('pal-search');
+    let palCat = 'all';
+    let palQuery = '';
+
+    function renderPalette() {
+      palGrid.innerHTML = '';
+      const q = palQuery.trim().toLowerCase();
+      let shown = 0;
+      BLOCK_TYPES.forEach(t => {
+        if (palCat !== 'all' && t.cat !== palCat) return;
+        if (q && !(t.en.toLowerCase().includes(q) || (t.cn || '').includes(q) || t.id.includes(q))) return;
+        shown++;
+        const el = document.createElement('div');
+        el.className = 'swatch' + (t.id === currentType ? ' active' : '');
+        el.dataset.id = t.id;
+        el.title = `${t.en}（${t.cn}）`;
+        el.appendChild(swatchImg(t.id, 'tex'));
+        const lbl = document.createElement('div');
+        lbl.className = 'lbl';
+        lbl.innerHTML = `<span class="cn">${t.cn || t.en}</span><span class="en">${t.en}</span>`;
+        el.appendChild(lbl);
+        el.addEventListener('click', () => selectType(t.id));
+        palGrid.appendChild(el);
+      });
+      palEmpty.style.display = shown ? 'none' : 'block';
+    }
+    function selectType(id) {
+      currentType = id;
+      if (mode === 'erase') setMode('build');
+      const t = TYPE_MAP[id];
+      selName.textContent = t ? `${t.cn} · ${t.en}` : '—';
+      palGrid.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.id === id));
+    }
+    palSearch.addEventListener('input', () => { palQuery = palSearch.value; renderPalette(); });
+    document.querySelectorAll('#pal-tabs .tab').forEach(tab => tab.addEventListener('click', () => {
+      palCat = tab.dataset.cat;
+      document.querySelectorAll('#pal-tabs .tab').forEach(b => b.classList.toggle('active', b === tab));
+      renderPalette();
+    }));
+
+    function setMode(m) {
+      mode = m;
+      document.querySelectorAll('#mode-group .btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    }
+    document.querySelectorAll('#mode-group .btn').forEach(b =>
+      b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+    // 楼层
+    const floorVal = document.getElementById('floor-val');
+    function setFloor(f) {
+      currentFloor = Math.max(0, Math.min(MAX_H - 1, f));
+      floorVal.textContent = currentFloor + 1;
+    }
+    document.getElementById('floor-up').addEventListener('click', () => setFloor(currentFloor + 1));
+    document.getElementById('floor-dn').addEventListener('click', () => setFloor(currentFloor - 1));
+
+    // 材料清单
+    const CAT_ORDER = ['wall', 'floor', 'print', 'ground'];
+    function computeBOM() {
+      const counts = {};
+      for (const b of blocks.values()) counts[b.typeId] = (counts[b.typeId] || 0) + 1;
+      return counts;
+    }
+    function refreshBOM() {
+      const counts = computeBOM();
+      const list = document.getElementById('bom-list');
+      list.innerHTML = '';
+      const used = BLOCK_TYPES.filter(t => counts[t.id]);
+      if (!used.length) {
+        list.innerHTML = '<div class="bom-empty">还没有放置任何砖块<br>选择素材后在场景中点击放置</div>';
+      } else {
+        CAT_ORDER.forEach(cat => {
+          const items = used.filter(t => t.cat === cat);
+          if (!items.length) return;
+          const sub = document.createElement('div');
+          sub.className = 'bom-sub';
+          sub.textContent = CAT_LABEL[cat] || cat;
+          list.appendChild(sub);
+          items.forEach(t => {
+            const row = document.createElement('div');
+            row.className = 'bom-row';
+            row.appendChild(swatchImg(t.id, 'sw'));
+            const nm = document.createElement('span');
+            nm.className = 'nm';
+            nm.innerHTML = `${t.cn || t.en}<small>${t.en}</small>`;
+            const ct = document.createElement('span');
+            ct.className = 'ct'; ct.textContent = counts[t.id];
+            row.appendChild(nm); row.appendChild(ct);
+            list.appendChild(row);
+          });
+        });
+      }
+      document.getElementById('bom-total').textContent = blocks.size;
+    }
+    function bomText() {
+      const counts = computeBOM();
+      const lines = ['【Pokopia 建筑材料清单】'];
+      CAT_ORDER.forEach(cat => {
+        const items = BLOCK_TYPES.filter(t => counts[t.id] && t.cat === cat);
+        if (!items.length) return;
+        lines.push(`\n# ${CAT_LABEL[cat] || cat}`);
+        items.forEach(t => lines.push(`${t.en}（${t.cn}） × ${counts[t.id]}`));
+      });
+      lines.push(`\n合计：${blocks.size} 块`);
+      return lines.join('\n');
+    }
+
+    document.getElementById('btn-copy').addEventListener('click', async () => {
+      if (!blocks.size) return toast('清单是空的');
+      try { await navigator.clipboard.writeText(bomText()); toast('已复制材料清单 ✅'); }
+      catch { toast('复制失败，请查看控制台'); console.log(bomText()); }
+    });
+    document.getElementById('btn-undo').addEventListener('click', undo);
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      if (blocks.size && confirm('确定清空所有砖块？')) clearAll();
+    });
+
+    // 视角
+    let panMode = false;
+    const btnPan = document.getElementById('btn-pan');
+    btnPan.addEventListener('click', () => {
+      panMode = !panMode;
+      btnPan.classList.toggle('active', panMode);
+      controls.mouseButtons.LEFT = panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+      canvas.style.cursor = panMode ? 'grab' : 'crosshair';
+      toast(panMode ? '平移模式：左键拖拽移动画面' : '已退出平移模式');
+    });
+    document.getElementById('btn-focus').addEventListener('click', focusBuild);
+    document.getElementById('btn-reset').addEventListener('click', resetView);
+
+    // 保存 / 读取
+    const SAVE_KEY = 'pokopia_build_v2';
+    function serialize() {
+      return [...blocks.entries()].map(([k, v]) => {
+        const [x, y, z] = k.split(',').map(Number);
+        return [x, y, z, v.typeId];
+      });
+    }
+    document.getElementById('btn-save').addEventListener('click', () => {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(serialize()));
+      toast('已保存到本地 💾');
+    });
+    document.getElementById('btn-load').addEventListener('click', () => {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return toast('没有找到已保存的建筑');
+      try {
+        const data = JSON.parse(raw);
+        clearAll(false); undoStack.length = 0;
+        data.forEach(([x, y, z, id]) => TYPE_MAP[id] && addBlock(x, y, z, id, false));
+        toast('已读取建筑 📂');
+      } catch { toast('读取失败'); }
+    });
+
+    // toast
+    let toastTimer;
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg; el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+    }
+
+    // 键盘快捷键
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+      else if (e.key === 'b') setMode('build');
+      else if (e.key === 'e') setMode('erase');
+      else if (e.key === 'q' || e.key === 'PageUp') setFloor(currentFloor + 1);
+      else if (e.key === 'PageDown') setFloor(currentFloor - 1);
+      else if (e.key === ' ') { e.preventDefault(); focusBuild(); }
+      else if (e.key === 'ArrowUp')    { e.preventDefault(); panView(0, 1); }
+      else if (e.key === 'ArrowDown')  { e.preventDefault(); panView(0, -1); }
+      else if (e.key === 'ArrowLeft')  { e.preventDefault(); panView(-1, 0); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); panView(1, 0); }
+    });
+
+    /* =========================================================
+     * 6. 渲染循环 & 自适应
+     * ======================================================= */
+    function resize() {
+      const w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resize);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (!isDragging) pick();
+      updateGhost();
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // 启动
+    renderPalette();
+    selectType(currentType);
+    refreshBOM();
+    resize();
+    animate();
+    document.getElementById('loader').classList.add('hidden');
+
+    // 首次进入放一小片地板示例
+    if (!localStorage.getItem(SAVE_KEY)) {
+      for (let x = 8; x < 12; x++) for (let z = 8; z < 12; z++) addBlock(x, 0, z, currentType, false);
+    }
+  </script>
+</body>
+</html>
