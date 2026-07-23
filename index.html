@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#f3ede2" />
   <title>Pokopia 建筑辅助工具 · 素材统计</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%236fb26b'/><rect x='30' y='30' width='40' height='40' rx='6' fill='%23d98b6a'/></svg>" />
@@ -23,41 +26,52 @@
     <div id="topbar">
       <div class="brand">
         <div class="logo"></div>
-        <div>Pokopia 建筑助手<br><small>素材用量参考工具</small></div>
+        <div class="brand-text">Pokopia 建筑助手<br><small>素材用量参考工具</small></div>
       </div>
 
       <div class="tool-group" id="mode-group">
-        <button class="btn active" data-mode="build"><span class="ic">🧱</span>建造</button>
-        <button class="btn" data-mode="erase"><span class="ic">🧽</span>擦除</button>
+        <button class="btn active" data-mode="build"><span class="ic">🧱</span><span class="btn-txt">建造</span></button>
+        <button class="btn" data-mode="erase"><span class="ic">🧽</span><span class="btn-txt">擦除</span></button>
       </div>
 
       <div class="divider"></div>
 
       <div class="tool-group height-ctrl">
-        <span>楼层</span>
+        <span class="btn-txt">楼层</span>
         <button class="btn step" id="floor-dn">−</button>
         <b id="floor-val">1</b>
         <button class="btn step" id="floor-up">+</button>
       </div>
 
-      <div class="divider"></div>
+      <div class="divider hide-mobile"></div>
 
-      <div class="tool-group">
-        <button class="btn" id="btn-pan"><span class="ic">✋</span>平移</button>
-        <button class="btn" id="btn-focus"><span class="ic">🎯</span>居中</button>
-        <button class="btn" id="btn-reset"><span class="ic">⟲</span>回正</button>
+      <div class="tool-group hide-mobile">
+        <button class="btn" id="btn-pan"><span class="ic">✋</span><span class="btn-txt">平移</span></button>
+        <button class="btn" id="btn-focus"><span class="ic">🎯</span><span class="btn-txt">居中</span></button>
+        <button class="btn" id="btn-reset"><span class="ic">⟲</span><span class="btn-txt">回正</span></button>
       </div>
 
       <div class="divider"></div>
 
       <div class="tool-group">
-        <button class="btn" id="btn-undo"><span class="ic">↩︎</span>撤销</button>
-        <button class="btn danger" id="btn-clear"><span class="ic">🗑</span>清空</button>
+        <button class="btn" id="btn-undo"><span class="ic">↩︎</span><span class="btn-txt">撤销</span></button>
+        <button class="btn danger hide-mobile" id="btn-clear"><span class="ic">🗑</span><span class="btn-txt">清空</span></button>
+        <button class="btn more-mobile" id="btn-more" type="button" title="更多"><span class="ic">⋯</span></button>
       </div>
     </div>
 
-    <!-- 右侧面板 -->
+    <!-- 手机端更多操作菜单 -->
+    <div id="more-menu" class="more-menu" hidden>
+      <button class="btn" id="btn-pan-m"><span class="ic">✋</span>平移</button>
+      <button class="btn" id="btn-focus-m"><span class="ic">🎯</span>居中</button>
+      <button class="btn" id="btn-reset-m"><span class="ic">⟲</span>回正</button>
+      <button class="btn danger" id="btn-clear-m"><span class="ic">🗑</span>清空</button>
+    </div>
+
+    <!-- 右侧/底部面板 -->
+    <div id="sheet-backdrop"></div>
     <div id="sidebar">
+      <div class="sheet-handle" aria-hidden="true"><span></span></div>
       <!-- 素材调色板 -->
       <div class="card" id="palette-card">
         <div class="card-hd" data-toggle="palette-card">
@@ -66,7 +80,7 @@
         </div>
         <div class="card-body">
           <div class="pal-controls">
-            <input id="pal-search" class="pal-search" type="search" placeholder="🔍 搜索素材（中/英文）" />
+            <input id="pal-search" class="pal-search" type="search" placeholder="🔍 搜索素材（中/英文）" enterkeyhint="search" />
             <div class="pal-tabs" id="pal-tabs">
               <button class="tab active" data-cat="all">全部</button>
               <button class="tab" data-cat="wall">墙壁</button>
@@ -109,8 +123,22 @@
       </div>
     </div>
 
-    <div id="hint">
+    <!-- 手机底部快捷栏 -->
+    <div id="mobile-dock">
+      <button class="dock-btn" data-sheet="palette" type="button">
+        <span class="ic">🧱</span><span>素材</span>
+      </button>
+      <button class="dock-btn" data-sheet="bom" type="button">
+        <span class="ic">📋</span><span>清单</span>
+        <b id="dock-count">0</b>
+      </button>
+    </div>
+
+    <div id="hint" class="hint-desk">
       <b>左键</b> 放置 · <b>右键/中键拖拽</b> 平移 · <b>左键拖拽</b> 旋转 · <b>滚轮</b> 缩放 · <b>方向键</b> 移动重心 · <b>空格</b> 居中
+    </div>
+    <div id="hint-mobile" class="hint-mobile">
+      <b>点按</b> 放置 · <b>单指拖</b> 旋转 · <b>双指</b> 缩放/平移 · 底部打开素材/清单
     </div>
 
     <div id="toast"></div>
@@ -421,15 +449,28 @@
       }
     }
 
-    let isDragging = false, downPos = null;
-    canvas.addEventListener('pointerdown', (e) => { downPos = { x: e.clientX, y: e.clientY }; isDragging = false; });
+    let isDragging = false, downPos = null, activePointers = new Set();
+    const DRAG_THRESHOLD = () => (window.matchMedia('(pointer: coarse)').matches ? 10 : 4);
+
+    canvas.addEventListener('pointerdown', (e) => {
+      activePointers.add(e.pointerId);
+      downPos = { x: e.clientX, y: e.clientY };
+      isDragging = false;
+    });
     canvas.addEventListener('pointermove', (e) => {
       updatePointer(e);
-      if (downPos && (Math.abs(e.clientX - downPos.x) > 4 || Math.abs(e.clientY - downPos.y) > 4)) isDragging = true;
+      const th = DRAG_THRESHOLD();
+      if (downPos && (Math.abs(e.clientX - downPos.x) > th || Math.abs(e.clientY - downPos.y) > th)) isDragging = true;
     });
+    function endPointer(e) {
+      activePointers.delete(e.pointerId);
+    }
+    canvas.addEventListener('pointercancel', (e) => { endPointer(e); downPos = null; });
     canvas.addEventListener('pointerup', (e) => {
+      endPointer(e);
       const wasDrag = isDragging; downPos = null;
-      if (wasDrag) return;
+      // 多指手势（缩放/平移）不触发放置
+      if (wasDrag || activePointers.size > 0 || e.isPrimary === false) return;
       updatePointer(e); pick();
       if (e.button === 2) { if (hovered) removeBlock(hovered.x, hovered.y, hovered.z); return; }
       if (e.button !== 0 || panMode) return;
@@ -437,6 +478,9 @@
       else if (target) { addBlock(target.x, target.y, target.z, currentType); }
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // 阻止双指页面缩放/长按菜单干扰
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    document.addEventListener('gesturechange', (e) => e.preventDefault());
 
     /* =========================================================
      * 5. UI：调色板（搜索 + 分类） / 模式 / 楼层 / 清单 / 存取
@@ -447,6 +491,46 @@
     const palSearch = document.getElementById('pal-search');
     let palCat = 'all';
     let palQuery = '';
+
+    /* ---- 手机抽屉 / dock ---- */
+    const sidebarEl = document.getElementById('sidebar');
+    const backdropEl = document.getElementById('sheet-backdrop');
+    const moreMenu = document.getElementById('more-menu');
+    let sheetMode = null; // 'palette' | 'bom' | null
+    function isMobileLayout() {
+      return window.matchMedia('(max-width: 720px)').matches;
+    }
+    function closeSheet() {
+      sheetMode = null;
+      sidebarEl.classList.remove('open', 'sheet-palette', 'sheet-bom');
+      backdropEl.classList.remove('show');
+      document.querySelectorAll('#mobile-dock .dock-btn').forEach(b => b.classList.remove('active'));
+    }
+    function openSheet(mode) {
+      if (!isMobileLayout()) return;
+      if (sheetMode === mode) { closeSheet(); return; }
+      sheetMode = mode;
+      sidebarEl.classList.add('open');
+      sidebarEl.classList.toggle('sheet-palette', mode === 'palette');
+      sidebarEl.classList.toggle('sheet-bom', mode === 'bom');
+      backdropEl.classList.add('show');
+      document.querySelectorAll('#mobile-dock .dock-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.sheet === mode);
+      });
+      // 打开对应面板时确保展开内容
+      const card = document.getElementById(mode === 'palette' ? 'palette-card' : 'bom-card');
+      if (card) {
+        card.classList.remove('collapsed');
+        localStorage.setItem('pokopia_fold_' + card.id, '0');
+      }
+      moreMenu.classList.remove('show');
+    }
+    backdropEl.addEventListener('click', closeSheet);
+    document.querySelectorAll('#mobile-dock .dock-btn').forEach(btn => {
+      btn.addEventListener('click', () => openSheet(btn.dataset.sheet));
+    });
+    // 下拉把手区域点击也可关闭
+    sidebarEl.querySelector('.sheet-handle')?.addEventListener('click', closeSheet);
 
     function renderPalette() {
       palGrid.innerHTML = '';
@@ -476,6 +560,8 @@
       const t = TYPE_MAP[id];
       selName.textContent = t ? `${t.cn} · ${t.en}` : '—';
       palGrid.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.id === id));
+      // 手机选完素材后收起抽屉，方便立刻搭建
+      if (isMobileLayout() && sheetMode === 'palette') closeSheet();
     }
     palSearch.addEventListener('input', () => { palQuery = palSearch.value; renderPalette(); });
     document.querySelectorAll('#pal-tabs .tab').forEach(tab => tab.addEventListener('click', () => {
@@ -569,6 +655,11 @@
         });
       }
       document.getElementById('bom-total').textContent = blocks.size;
+      const dockCount = document.getElementById('dock-count');
+      if (dockCount) {
+        dockCount.textContent = blocks.size || '';
+        dockCount.dataset.zero = blocks.size ? '0' : '1';
+      }
       fillMatList(document.getElementById('cost-list'), aggregateCost(counts, 'recipe'),
         used.length ? '当前方块多为世界采集，暂无合成配方' : '放置方块后显示原材料');
       fillMatList(document.getElementById('print-list'), aggregateCost(counts, 'print'),
@@ -618,22 +709,41 @@
       catch { toast('复制失败，请查看控制台'); console.log(bomText()); }
     });
     document.getElementById('btn-undo').addEventListener('click', undo);
-    document.getElementById('btn-clear').addEventListener('click', () => {
-      if (blocks.size && confirm('确定清空所有砖块？')) clearAll();
-    });
 
     // 视角
     let panMode = false;
-    const btnPan = document.getElementById('btn-pan');
-    btnPan.addEventListener('click', () => {
-      panMode = !panMode;
-      btnPan.classList.toggle('active', panMode);
+    function setPanMode(on) {
+      panMode = on;
+      document.getElementById('btn-pan')?.classList.toggle('active', panMode);
+      document.getElementById('btn-pan-m')?.classList.toggle('active', panMode);
       controls.mouseButtons.LEFT = panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+      controls.touches = panMode
+        ? { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }
+        : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
       canvas.style.cursor = panMode ? 'grab' : 'crosshair';
-      toast(panMode ? '平移模式：左键拖拽移动画面' : '已退出平移模式');
-    });
+      toast(panMode ? '平移模式：拖拽移动画面' : '已退出平移模式');
+    }
+    document.getElementById('btn-pan').addEventListener('click', () => setPanMode(!panMode));
+    document.getElementById('btn-pan-m').addEventListener('click', () => { setPanMode(!panMode); moreMenu.classList.remove('show'); });
     document.getElementById('btn-focus').addEventListener('click', focusBuild);
     document.getElementById('btn-reset').addEventListener('click', resetView);
+    document.getElementById('btn-focus-m').addEventListener('click', () => { focusBuild(); moreMenu.classList.remove('show'); });
+    document.getElementById('btn-reset-m').addEventListener('click', () => { resetView(); moreMenu.classList.remove('show'); });
+
+    function doClear() {
+      if (blocks.size && confirm('确定清空所有砖块？')) clearAll();
+      moreMenu.classList.remove('show');
+    }
+    document.getElementById('btn-clear').addEventListener('click', doClear);
+    document.getElementById('btn-clear-m').addEventListener('click', doClear);
+
+    document.getElementById('btn-more').addEventListener('click', (e) => {
+      e.stopPropagation();
+      moreMenu.classList.toggle('show');
+    });
+    document.addEventListener('click', (e) => {
+      if (!moreMenu.contains(e.target) && e.target.id !== 'btn-more') moreMenu.classList.remove('show');
+    });
 
     // 保存 / 读取
     const SAVE_KEY = 'pokopia_build_v2';
@@ -686,16 +796,21 @@
      * 6. 渲染循环 & 自适应
      * ======================================================= */
     function resize() {
-      const w = window.innerWidth, h = window.innerHeight;
+      const vv = window.visualViewport;
+      const w = Math.round(vv ? vv.width : window.innerWidth);
+      const h = Math.round(vv ? vv.height : window.innerHeight);
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      if (!isMobileLayout()) closeSheet();
     }
     window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('scroll', resize);
 
     function animate() {
       requestAnimationFrame(animate);
-      if (!isDragging) pick();
+      if (!isDragging && activePointers.size <= 1) pick();
       updateGhost();
       controls.update();
       renderer.render(scene, camera);
@@ -708,6 +823,13 @@
     resize();
     animate();
     document.getElementById('loader').classList.add('hidden');
+    // 手机首次进入给一次轻提示
+    if (isMobileLayout() && !localStorage.getItem('pokopia_mobile_tip')) {
+      setTimeout(() => {
+        toast('底部可打开素材与清单');
+        localStorage.setItem('pokopia_mobile_tip', '1');
+      }, 600);
+    }
 
     // 首次进入放一小片地板示例
     if (!localStorage.getItem(SAVE_KEY)) {
